@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>이동 데이터 수집</title>
+<script src="config.js"></script>
+<style>
+  :root{
+    --bg:#f6f3ea; --card:#fffdf7; --ink:#3c3830; --muted:#7a7365; --line:#e2ddcf;
+    --accent:#1565c0; --accent-ink:#fff; --ok:#2e7d32; --bad:#c62828;
+    --person:#7b1fa2; --obs:#c62828; --goal:#f9a825; --start:#2e7d32;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .screen{display:none;min-height:100%}
+  .screen.on{display:flex}
+  button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 20px;font-weight:600}
+  .primary{background:var(--accent);color:var(--accent-ink)}
+  .primary:disabled{background:#b9b3a4;cursor:default}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  kbd{font-family:inherit;font-size:.85em;border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:6px;padding:1px 7px;background:#fff}
+
+  /* intro */
+  #intro{align-items:flex-start;justify-content:center;padding:40px 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    max-width:680px;width:100%;padding:32px 32px 28px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 24px}
+  h2{font-size:15px;margin:24px 0 8px}
+  ul{margin:0;padding-left:20px}
+  li{margin:2px 0}
+  .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin:4px 0 0;padding:0;list-style:none}
+  .dot{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-right:8px}
+  .em{background:#f3e9f7;border-radius:12px;padding:14px 16px;margin-top:20px}
+  .em b{color:var(--person)}
+  .row{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}
+  .row input{flex:1;min-width:160px;font:inherit;padding:11px 14px;border:1px solid var(--line);
+    border-radius:10px;background:#fff}
+  .row input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  #idErr{color:var(--bad);font-size:14px;min-height:20px;margin-top:6px}
+  #loadState{color:var(--muted);font-size:14px;margin-top:4px}
+  #mobileWarn{display:none;background:#fdecea;color:var(--bad);border-radius:10px;padding:10px 14px;margin-top:16px;font-size:14px}
+
+  /* game */
+  #game{height:100vh}
+  #stage{flex:1;position:relative;min-width:0}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none}
+  #banner span{background:rgba(255,253,247,.94);border:1px solid var(--line);border-radius:14px;
+    padding:14px 26px;font-size:24px;font-weight:700;text-align:center;line-height:1.45}
+  #banner small{display:block;font-size:15px;font-weight:500;color:var(--muted)}
+  #panel{width:280px;flex:none;border-left:1px solid var(--line);background:var(--card);
+    padding:24px 20px;overflow:auto}
+  #panel .tag{display:inline-block;font-size:13px;font-weight:700;border-radius:999px;padding:3px 10px;
+    background:#e3eefb;color:var(--accent)}
+  #panel .tag.practice{background:#efece4;color:var(--muted)}
+  #panel .big{font-size:30px;font-weight:700;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+  #panel .muted{color:var(--muted);font-size:14px}
+  #panel hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  #panel p{margin:6px 0;font-size:14px}
+  #upl{font-size:13px;color:var(--muted);margin-top:4px}
+  #pause{position:absolute;inset:0;background:rgba(60,56,48,.35);display:none;align-items:center;justify-content:center}
+  #pause.on{display:flex}
+  #pause .card{max-width:380px;text-align:center}
+
+  /* done */
+  #done{align-items:center;justify-content:center;padding:40px 16px}
+  #done .card{text-align:center}
+  #doneStatus{margin:16px 0 4px;font-weight:600}
+  #doneHint{color:var(--muted);font-size:14px;margin:0 0 20px}
+
+  @media (max-width:760px){
+    #game{flex-direction:column;height:auto;min-height:100vh}
+    #stage{height:70vh;flex:none}
+    #panel{width:auto;border-left:0;border-top:1px solid var(--line)}
+    .card{padding:24px 18px}
+    .legend{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<section id="intro" class="screen on">
+  <div class="card">
+    <h1>이동 데이터 수집</h1>
+    <p class="sub">졸업 프로젝트용으로 사람이 어떻게 걷는지 기록해요. 10분쯤 걸려요.</p>
+
+    <h2>조작</h2>
+    <ul>
+      <li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 가고 싶은 방향으로 이동해요. 두 개를 같이 누르면 대각선으로 가요.</li>
+      <li>아무것도 누르지 않으면 제자리에 서 있어요.</li>
+      <li><kbd>Enter</kbd> 또는 <kbd>Space</kbd> 한 판 시작 · <kbd>R</kbd> 이번 판 다시 · <kbd>Esc</kbd> 일시정지/끝내기</li>
+    </ul>
+
+    <h2>화면</h2>
+    <ul class="legend">
+      <li><span class="dot" style="background:var(--start)"></span>출발점</li>
+      <li><span class="dot" style="background:var(--goal)"></span>목적지 (여기까지 가면 성공)</li>
+      <li><span class="dot" style="background:var(--person);box-shadow:inset 0 0 0 2px #fff,0 0 0 1px var(--person)"></span>마주 오는 사람</li>
+      <li><span class="dot" style="background:var(--obs)"></span>움직이는 장애물</li>
+    </ul>
+
+    <div class="em">
+      <p style="margin:0 0 6px"><b>"빨리 가야지" 하지 마세요.</b> 시간 제한도 점수도 없어요.</p>
+      <p style="margin:0">길에서 사람을 피해 걷듯이 움직여 주세요. 보라색 사람이 다가오면 미리 자연스럽게 비켜 가고, 막히면 잠깐 서 있어도 괜찮아요. 부딪혀서 실패해도 괜찮아요. 처음 <span id="nPractice">2</span>판은 연습이라 기록되지 않아요.</p>
+    </div>
+
+    <div class="row">
+      <input id="sid" placeholder="참여자 아이디 (예: P01)" maxlength="20" autocomplete="off" spellcheck="false">
+      <button id="go" class="primary" disabled>준비 중…</button>
+    </div>
+    <div id="idErr"></div>
+    <div id="loadState">프로그램을 불러오는 중이에요. 처음에는 10초쯤 걸려요.</div>
+    <div id="mobileWarn">키보드가 필요해요. PC(노트북)에서 열어 주세요.</div>
+    <div id="pendingNote" style="display:none;font-size:14px;margin-top:12px;color:var(--muted)"></div>
+  </div>
+</section>
+
+<section id="game" class="screen">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="banner"></div>
+    <div id="pause">
+      <div class="card">
+        <h1 style="font-size:20px">일시정지</h1>
+        <p class="sub" style="margin-bottom:18px">끝내면 지금까지 기록한 판이 저장돼요. 진행 중이던 판은 저장되지 않아요.</p>
+        <div class="row" style="justify-content:center;margin-top:0">
+          <button id="resume" class="primary">계속하기</button>
+          <button id="quit" class="ghost">저장하고 끝내기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside id="panel">
+    <span id="phase" class="tag">기록 중</span>
+    <div class="big" id="epText">1 / 12</div>
+    <div class="muted" id="savedText">저장된 판 0</div>
+    <div id="upl"></div>
+    <hr>
+    <p>노란 목적지까지 <b>평소 걷듯이</b> 가 주세요.</p>
+    <p>방향키: 가려는 방향</p>
+    <hr>
+    <p><span class="dot" style="background:var(--person)"></span>마주 오는 사람</p>
+    <p><span class="dot" style="background:var(--obs)"></span>장애물</p>
+    <p><span class="dot" style="background:var(--goal)"></span>목적지</p>
+    <hr>
+    <p class="muted"><kbd>R</kbd> 다시 &nbsp; <kbd>Esc</kbd> 일시정지</p>
+    <p class="muted" id="sidText"></p>
+  </aside>
+</section>
+
+<section id="done" class="screen">
+  <div class="card">
+    <h1 id="doneTitle">감사합니다!</h1>
+    <p class="sub" id="doneSummary"></p>
+    <p id="doneStatus"></p>
+    <p id="doneHint"></p>
+    <div class="row" style="justify-content:center">
+      <button id="retryUpload" class="primary" style="display:none">다시 보내기</button>
+      <button id="dl" class="ghost">내 컴퓨터에 파일 저장</button>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+"use strict";
+const CFG = Object.assign({UPLOAD_URL:"", EPISODES:10, PRACTICE:2}, window.COLLECT_CONFIG || {});
+const qs = new URLSearchParams(location.search);
+if (qs.get("episodes")) CFG.EPISODES = Math.max(1, Math.min(50, +qs.get("episodes") || CFG.EPISODES));
+if (qs.get("practice") !== null) CFG.PRACTICE = Math.max(0, Math.min(5, +qs.get("practice") || 0));
+const FPS = 10;  // collect_demo.py default
+const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+// [source file, path inside Pyodide]
+const PY_FILES = [["collect_demo.py"], ["visual_gym.py"], ["maps.py"], ["random_map_gen.py"], ["web_bridge.py"],
+                  ["gym_shim.py", "shim/gymnasium/__init__.py"], ["gym_shim_spaces.py", "shim/gymnasium/spaces.py"]];
+
+const $ = id => document.getElementById(id);
+const show = id => { for (const s of document.querySelectorAll(".screen")) s.classList.toggle("on", s.id === id); };
+$("nPractice").textContent = CFG.PRACTICE;
+if (matchMedia("(pointer:coarse)").matches && !matchMedia("(any-pointer:fine)").matches) $("mobileWarn").style.display = "block";
+
+// ---- Python (Pyodide) ----
+let api = null;
+
+async function loadPython() {
+  const dev = qs.get("dev");  // local dev server instead of Pyodide
+  if (dev) return devApi(dev);
+
+  const say = t => $("loadState").textContent = t;
+  say("Python 불러오는 중… (처음에는 10초쯤 걸려요)");
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = PYODIDE + "pyodide.js"; s.onload = res; s.onerror = () => rej(new Error("Python 엔진을 받지 못했어요"));
+    document.head.appendChild(s);
+  });
+  const py = await loadPyodide({indexURL: PYODIDE});
+  say("계산 라이브러리 불러오는 중…");
+  await py.loadPackage("numpy");
+  say("시뮬레이션 코드 불러오는 중…");
+  const root = "/home/pyodide/sim/";
+  for (const [f, dst] of PY_FILES) {
+    const r = await fetch(f, {cache: "no-cache"});
+    if (!r.ok) throw new Error(`${f} 파일이 없어요 (${r.status})`);
+    const path = root + (dst || f);
+    py.FS.mkdirTree(path.slice(0, path.lastIndexOf("/")));
+    py.FS.writeFile(path, new Uint8Array(await r.arrayBuffer()));
+  }
+  py.runPython(`
+import sys
+sys.path[:0] = ["${root}", "${root}shim"]
+import visual_gym
+assert visual_gym.HAS_RANDOM_MAPS, "random_map_gen.py 를 불러오지 못했어요"
+import web_bridge
+`);
+  const wb = py.pyimport("web_bridge");
+  let s = null;
+  const J = x => JSON.parse(x);
+  return {
+    async newSession(id, eps, prac, stamp) { s = wb.new_session(id, eps, prac, stamp); },
+    async start()   { return J(s.start_episode()); },
+    async step(u, d, l, r) { return J(s.step(u, d, l, r)); },
+    async finish()  { return J(s.finish_episode()); },
+    async discard() { s.discard_episode(); },
+    async exportData() { return J(s.export()); },
+  };
+}
+
+function devApi(base) {
+  const call = async (m, a = []) => {
+    const r = await fetch(base + "/call", {method: "POST", body: JSON.stringify({m, a})});
+    return r.json();
+  };
+  return {
+    newSession: (...a) => call("new_session", a), start: () => call("start_episode"),
+    step: (...a) => call("step", a), finish: () => call("finish_episode"),
+    discard: () => call("discard_episode"), exportData: () => call("export"),
+  };
+}
+
+// ---- intro ----
+const ID_RE = /^[A-Za-z0-9_-]{1,20}$/;
+let ready = false;
+loadPython().then(a => {
+  api = a; ready = true;
+  $("go").disabled = false; $("go").textContent = "시작하기";
+  $("loadState").textContent = "준비 완료! 아이디를 입력하고 시작하세요.";
+}).catch(e => {
+  console.error(e);
+  $("go").textContent = "불러오기 실패";
+  $("loadState").innerHTML = "프로그램을 불러오지 못했어요. 새로고침해 보세요. 계속 안 되면 이 문구를 캡처해서 보내 주세요.<br><small></small>";
+  $("loadState").querySelector("small").textContent = String(e && e.message || e);
+});
+
+$("sid").addEventListener("input", () => { $("idErr").textContent = ""; });
+$("sid").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+let starting = false;
+$("go").addEventListener("click", async () => {
+  if (!ready || starting) return;
+  const id = $("sid").value.trim();
+  if (!ID_RE.test(id)) { $("idErr").textContent = "영문, 숫자, _, - 만 쓸 수 있어요 (띄어쓰기·한글 X)."; return; }
+  $("sid").blur();
+  // Check the ID with the server; continue if it is unreachable.
+  if (CFG.UPLOAD_URL) {
+    $("go").disabled = true; $("go").textContent = "확인 중…";
+    try {
+      const j = await fetchJSON(CFG.UPLOAD_URL + "?check=" + encodeURIComponent(id), {}, 10000);
+      if (j && j.accepting === false) { $("idErr").textContent = "지금은 수집 기간이 아니에요."; return; }
+      if (j && j.allowed === false) { $("idErr").textContent = "등록되지 않은 아이디예요. 안내받은 아이디를 확인해 주세요."; return; }
+    } catch (e) {
+      console.warn("id check skipped", e);
+    } finally {
+      $("go").disabled = false; $("go").textContent = "시작하기";
+    }
+  }
+  starting = true;
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  const stamp = `${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  await api.newSession(id, CFG.EPISODES, CFG.PRACTICE, stamp);
+  subject = id; $("sidText").textContent = "아이디: " + id;
+  show("game"); resize();
+  await startEpisode();
+  requestAnimationFrame(tick);
+});
+
+// ---- game ----
+let subject = "", world = null, dyn = null, trail = [];
+let mode = "idle";  // wait | play | between | over
+let paused = false, busy = false, lastStep = 0, wasPractice = true;
+let savedCount = 0, lastExport = null;
+const keys = new Set();
+
+async function startEpisode() {
+  world = await api.start();
+  dyn = world; trail = [world.agent.slice()];
+  mode = "wait";
+  const practice = world.practice;
+  $("phase").textContent = practice ? "연습 (기록 안 됨)" : "기록 중";
+  $("phase").className = "tag" + (practice ? " practice" : "");
+  $("epText").textContent = `${world.ep + 1} / ${world.total}`;
+  $("savedText").textContent = `저장된 판 ${world.saved}`;
+  const first = !practice && wasPractice && CFG.PRACTICE > 0;
+  wasPractice = practice;
+  banner(first ? "연습 끝! 지금부터 기록돼요" : "Enter 또는 Space 를 누르면 시작",
+         first ? "Enter 또는 Space 를 누르면 시작" : "지도를 먼저 훑어봐도 좋아요");
+}
+
+function banner(t, small, color) {
+  const b = $("banner");
+  if (!t) { b.innerHTML = ""; return; }
+  b.innerHTML = "<span></span>";
+  const sp = b.firstChild; sp.textContent = t;
+  if (color) sp.style.color = color;
+  if (small) { const s = document.createElement("small"); s.textContent = small; sp.appendChild(s); }
+}
+
+async function doStep() {
+  busy = true;
+  try {
+    const up = keys.has("ArrowUp") || keys.has("KeyW"), dn = keys.has("ArrowDown") || keys.has("KeyS");
+    const lf = keys.has("ArrowLeft") || keys.has("KeyA"), rt = keys.has("ArrowRight") || keys.has("KeyD");
+    dyn = await api.step(up, dn, lf, rt);
+    trail.push(dyn.agent.slice());
+    if (dyn.end) await endEpisode(dyn.success);
+  } finally { busy = false; }
+}
+
+async function endEpisode(ok) {
+  mode = "between";
+  const f = await api.finish();
+  savedCount = f.saved;
+  $("savedText").textContent = `저장된 판 ${f.saved}`;
+  banner(ok ? "도착!" : "실패…", ok ? null : "괜찮아요, 다음 판으로 넘어가요", ok ? "var(--ok)" : "var(--bad)");
+  if (f.recorded) upload(false);
+  await new Promise(r => setTimeout(r, 900));
+  if (f.all_done) return finishSession();
+  await startEpisode();
+}
+
+function tick(ts) {
+  if (mode === "over") return;
+  if (mode === "play" && !paused && !busy) {
+    const dt = 1000 / FPS;
+    if (ts - lastStep >= dt) {
+      lastStep = ts - lastStep > 2 * dt ? ts : lastStep + dt;
+      doStep();
+    }
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+// ---- input ----
+const GAME_KEYS = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyW","KeyA","KeyS","KeyD"]);
+addEventListener("keydown", async e => {
+  if (!$("game").classList.contains("on")) return;
+  if (GAME_KEYS.has(e.code)) e.preventDefault();
+  keys.add(e.code);
+  if (e.repeat || busy) return;
+  if (paused) { if (e.code === "Escape" || e.code === "Space" || e.code === "Enter") setPause(false); return; }
+  if (e.code === "Escape" && (mode === "wait" || mode === "play")) { setPause(true); return; }
+  if (mode === "wait" && (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space")) {
+    mode = "play"; banner(null); lastStep = performance.now(); return;
+  }
+  if (e.code === "KeyR" && (mode === "wait" || mode === "play")) {
+    busy = true;
+    try { await api.discard(); await startEpisode(); } finally { busy = false; }
+  }
+});
+addEventListener("keyup", e => keys.delete(e.code));
+addEventListener("blur", () => keys.clear());
+document.addEventListener("visibilitychange", () => { keys.clear(); if (document.hidden && mode === "play") setPause(true); });
+
+function setPause(on) {
+  paused = on; keys.clear();
+  $("pause").classList.toggle("on", on);
+  if (!on) lastStep = performance.now();
+}
+$("resume").addEventListener("click", () => setPause(false));
+$("quit").addEventListener("click", async () => {
+  $("quit").disabled = true;
+  await api.discard();
+  setPause(false);
+  finishSession();
+});
+
+// ---- render (same as collect_demo.draw_world) ----
+const cv = $("cv"), ctx = cv.getContext("2d");
+const C = {bg:"#f6f3ea", floor:"#e8e4d6", wall:"#6e685c", grid:"#d6d2c6", start:"#2e7d32",
+           goal:"#f9a825", obs:"#c62828", person:"#7b1fa2", agent:"#1565c0"};
+let L = {cell: 20, ox: 0, oy: 0};
+
+function resize() {
+  const r = $("stage").getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener("resize", resize);
+
+function fit() {
+  const r = $("stage").getBoundingClientRect();
+  const cell = Math.max(6, Math.floor(Math.min((r.width - 40) / world.w, (r.height - 40) / world.h)));
+  L = {cell, ox: Math.floor((r.width - world.w * cell) / 2), oy: Math.floor((r.height - world.h * cell) / 2)};
+}
+const px = (x, y) => [L.ox + x * L.cell, L.oy + (world.h - y) * L.cell];
+
+function circle(x, y, rad, fill, stroke, lw) {
+  ctx.beginPath(); ctx.arc(x, y, Math.max(1, rad), 0, Math.PI * 2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
+}
+
+function draw() {
+  if (!world) return;
+  const r = $("stage").getBoundingClientRect();
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, r.width, r.height);
+  fit();
+  const c = L.cell;
+  for (let gy = 0; gy < world.h; gy++) for (let gx = 0; gx < world.w; gx++) {
+    const [x, y] = px(gx, gy + 1);
+    ctx.fillStyle = world.grid[gy][gx] ? C.wall : C.floor; ctx.fillRect(x, y, c, c);
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, c - 1, c - 1);
+  }
+  circle(...px(...world.start), c / 3, C.start);
+  const g = px(...world.goal);
+  circle(...g, world.goal_radius * c, null, C.goal, 3);
+  circle(...g, c / 4, C.goal);
+  if (trail.length > 1) {
+    ctx.beginPath(); ctx.strokeStyle = C.agent; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    trail.forEach((p, i) => { const [x, y] = px(...p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+  for (const [ox, oy, rad, person] of dyn.movers) {
+    const [x, y] = px(ox, oy);
+    circle(x, y, rad * c, person ? C.person : C.obs);
+    if (person) circle(x, y, rad * c, null, "#fff", 2);
+  }
+  const th = dyn.heading, [ax, ay] = dyn.agent;
+  ctx.beginPath();
+  [[0, .42], [2.5, .30], [-2.5, .30]].forEach(([a, rr], i) => {
+    const [x, y] = px(ax + rr * Math.cos(th + a), ay + rr * Math.sin(th + a));
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.closePath(); ctx.fillStyle = C.agent; ctx.fill();
+}
+
+// ---- upload ----
+// A cumulative snapshot is sent after each recorded episode. Each payload is kept in
+// localStorage until the server confirms it, and resent on the next visit if needed.
+let upState = "none", upPending = false, upBusy = false;
+const PENDING_PREFIX = "walkstudy:pending:";
+
+function setUpl(t) { $("upl").textContent = t; }
+
+async function fetchJSON(url, opts, ms) {
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(url, Object.assign({signal: ac.signal}, opts));
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+function pendingPut(p) {
+  try { localStorage.setItem(PENDING_PREFIX + p.filename, JSON.stringify(Object.assign({savedAt: Date.now()}, p))); }
+  catch (e) { console.warn("pending save failed", e); }
+}
+function pendingGet(name) {
+  try { return JSON.parse(localStorage.getItem(PENDING_PREFIX + name) || "null"); } catch (e) { return null; }
+}
+function pendingDone(p) {
+  try {
+    const cur = pendingGet(p.filename);
+    if (cur && cur.n <= p.n && (!cur.final || p.final)) localStorage.removeItem(PENDING_PREFIX + p.filename);
+  } catch (e) {}
+}
+function pendingAll() {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(PENDING_PREFIX)) { const v = pendingGet(k.slice(PENDING_PREFIX.length)); if (v) out.push(v); }
+    }
+  } catch (e) {}
+  return out;
+}
+
+// Returns ok | rejected | retry | unconfirmed
+async function sendOnce(p, allowNoCors) {
+  const body = JSON.stringify({filename: p.filename, subject: p.subject, b64: p.b64,
+                               n: p.n, succ: p.succ, steps: p.steps, final: p.final});
+  try {
+    const j = await fetchJSON(CFG.UPLOAD_URL, {method: "POST", body}, 45000);
+    if (j && j.ok) return {state: "ok", res: j};
+    if (j && j.retryable) return {state: "retry", error: j.error};
+    return {state: "rejected", error: j && (j.error + ": " + j.message)};
+  } catch (e) {
+    // Response unreadable. On the last attempt, send without reading the response.
+    if (allowNoCors) {
+      try {
+        await fetch(CFG.UPLOAD_URL, {method: "POST", body, mode: "no-cors"});
+        return {state: "unconfirmed"};
+      } catch (e2) {}
+    }
+    return {state: "retry", error: String(e && e.message || e)};
+  }
+}
+
+async function sendWithRetry(p, tries) {
+  const waits = [0, 2000, 5000, 10000];
+  let r = {state: "retry"};
+  for (let i = 0; i < tries; i++) {
+    if (waits[i]) await new Promise(res => setTimeout(res, waits[i]));
+    r = await sendOnce(p, i === tries - 1);
+    if (r.state !== "retry") break;
+  }
+  if (r.state === "ok") pendingDone(p);
+  if (r.state === "rejected") console.error("upload rejected", r.error);
+  return r;
+}
+
+async function upload(final) {
+  lastExport = await api.exportData();
+  if (!lastExport.n) return;
+  const p = {filename: lastExport.filename, subject, b64: lastExport.b64,
+             n: lastExport.n, succ: lastExport.succ, steps: lastExport.steps, final: !!final};
+  pendingPut(p);
+  if (!CFG.UPLOAD_URL) { upState = "off"; return; }
+  if (upBusy) { upPending = true; return; }  // keep uploads in order
+  upBusy = true; upState = "sending"; setUpl("자동 저장 중…");
+  try {
+    const r = await sendWithRetry(p, final ? 3 : 1);
+    upState = r.state;
+    setUpl(r.state === "ok" ? `자동 저장됨 (${p.n}판)`
+         : r.state === "rejected" ? "서버가 거부했어요. 끝나면 파일로 저장해 주세요."
+         : "자동 저장 실패. 다음 판에서 다시 보내요.");
+  } finally {
+    upBusy = false;
+    if (upPending) { upPending = false; await upload(final); }
+  }
+}
+
+async function finishSession() {
+  mode = "over"; keys.clear();
+  show("done");
+  lastExport = await api.exportData();
+  if (!lastExport.n) {
+    $("doneTitle").textContent = "기록된 판이 없어요";
+    $("doneSummary").textContent = "새로고침하면 처음부터 다시 할 수 있어요.";
+    $("dl").style.display = "none";
+    return;
+  }
+  $("doneSummary").textContent = `기록한 판 ${lastExport.n}개 (도착 ${lastExport.succ}) · 총 ${lastExport.steps}스텝`;
+  await sendFinal();
+}
+
+async function sendFinal() {
+  if (!CFG.UPLOAD_URL) {
+    pendingPut({filename: lastExport.filename, subject, b64: lastExport.b64, n: lastExport.n,
+                succ: lastExport.succ, steps: lastExport.steps, final: true});
+    $("doneStatus").textContent = "아래 버튼으로 파일을 저장해서 보내 주세요.";
+    $("doneHint").textContent = lastExport.filename;
+    $("dl").className = "primary";
+    return;
+  }
+  $("doneStatus").textContent = "결과를 보내는 중…"; $("retryUpload").style.display = "none";
+  while (upBusy) await new Promise(r => setTimeout(r, 200));
+  await upload(true);
+  $("retryUpload").style.display = upState === "ok" ? "none" : "";
+  if (upState === "ok") {
+    $("doneStatus").textContent = "✓ 결과가 전송됐고 서버가 저장을 확인했어요. 이제 창을 닫아도 돼요.";
+    $("doneHint").textContent = "";
+  } else if (upState === "unconfirmed") {
+    $("doneStatus").textContent = "결과를 보냈지만 저장됐는지 확인하지 못했어요.";
+    $("doneHint").textContent = "만일을 위해 '내 컴퓨터에 파일 저장'을 눌러 파일도 보내 주세요.";
+    $("dl").className = "primary";
+  } else if (upState === "rejected") {
+    $("doneStatus").textContent = "서버가 결과를 받지 않았어요.";
+    $("doneHint").textContent = "'내 컴퓨터에 파일 저장'을 눌러 파일을 직접 보내 주세요.";
+    $("dl").className = "primary"; $("retryUpload").style.display = "none";
+  } else {
+    $("doneStatus").textContent = "자동 전송에 실패했어요 (인터넷 연결 확인).";
+    $("doneHint").textContent = "다시 보내기를 눌러 보거나, 파일을 저장해서 직접 보내 주세요. 이 브라우저에도 보관돼서, 다음에 이 페이지를 열면 자동으로 다시 보내요.";
+    $("dl").className = "primary";
+  }
+}
+$("retryUpload").addEventListener("click", sendFinal);
+
+function downloadB64(b64, filename) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([u8], {type: "application/octet-stream"}));
+  a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+}
+$("dl").addEventListener("click", () => {
+  if (lastExport && lastExport.n) downloadB64(lastExport.b64, lastExport.filename);
+});
+
+// Resend unconfirmed payloads from a previous visit.
+(async function resendPending() {
+  const list = pendingAll();
+  if (!list.length) return;
+  const note = $("pendingNote");
+  note.style.display = "block";
+  if (!CFG.UPLOAD_URL) { note.textContent = `이 브라우저에 보내지 못한 기록이 ${list.length}개 있어요.`; return; }
+  note.textContent = `이전에 보내지 못한 기록 ${list.length}개를 보내는 중…`;
+  let ok = 0, failed = [];
+  for (const p of list) {
+    const r = await sendWithRetry(p, 2);
+    if (r.state === "ok") ok++; else failed.push(p);
+    if (r.state === "rejected") { try { localStorage.removeItem(PENDING_PREFIX + p.filename); } catch (e) {} }
+  }
+  if (!failed.length) { note.textContent = `이전에 보내지 못한 기록 ${ok}개를 전송했어요.`; return; }
+  note.textContent = `이전 기록 ${failed.length}개를 아직 보내지 못했어요. `;
+  const b = document.createElement("button");
+  b.className = "ghost"; b.style.padding = "4px 10px"; b.textContent = "파일로 저장";
+  b.onclick = () => failed.forEach(p => downloadB64(p.b64, p.filename));
+  note.appendChild(b);
+})();
+
+addEventListener("beforeunload", e => {
+  if ((mode === "play" || mode === "wait" || mode === "between") && savedCount > 0 && upState !== "ok") {
+    e.preventDefault(); e.returnValue = "";
+  }
+});
+})();
+</script>
+</body>
+</html>
